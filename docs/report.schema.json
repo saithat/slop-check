@@ -1,0 +1,468 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/saithat/slop-check/docs/report.schema.json",
+  "title": "slop-check report (schema_version 6)",
+  "description": "Every object lists all of its keys; a value that does not apply is null. Arrays and paths are in a stable order, so reports from the same analyzer fingerprint and input are byte-identical. Paths are relative to the scan root and use '/' separators. Lines are 1-based and inclusive.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "tool_version",
+    "metric_version",
+    "analyzer_fingerprint",
+    "scan_scope",
+    "complete",
+    "diagnostics",
+    "policy",
+    "summary",
+    "observations",
+    "observation_codes",
+    "by_language",
+    "files",
+    "clones",
+    "dependencies"
+  ],
+  "properties": {
+    "schema_version": {
+      "description": "Changes whenever the shape of this report changes.",
+      "const": 6
+    },
+    "tool_version": { "type": "string" },
+    "metric_version": {
+      "description": "Changes whenever a metric or rule definition changes.",
+      "type": "string"
+    },
+    "analyzer_fingerprint": {
+      "description": "BLAKE3 hash of the analyzer's sources and lockfile. Compare reports only when it matches.",
+      "type": "string"
+    },
+    "scan_scope": {
+      "description": "What was scanned, relative to the enclosing git repository when there is one.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path"],
+      "properties": {
+        "kind": { "enum": ["file", "directory"] },
+        "path": { "$ref": "#/$defs/path" }
+      }
+    },
+    "complete": {
+      "description": "False when any diagnostic exists: part of the scan is missing, and the process exits with status 2.",
+      "type": "boolean"
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/diagnostic" }
+    },
+    "policy": {
+      "description": "The fixed thresholds that produced this report.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cyclomatic_threshold",
+        "cognitive_threshold",
+        "parameter_threshold",
+        "min_clone_lines",
+        "min_clone_tokens",
+        "min_tuple_return_elements",
+        "min_dispatch_branches"
+      ],
+      "properties": {
+        "cyclomatic_threshold": { "$ref": "#/$defs/count" },
+        "cognitive_threshold": { "$ref": "#/$defs/count" },
+        "parameter_threshold": { "$ref": "#/$defs/count" },
+        "min_clone_lines": { "$ref": "#/$defs/count" },
+        "min_clone_tokens": { "$ref": "#/$defs/count" },
+        "min_tuple_return_elements": { "$ref": "#/$defs/count" },
+        "min_dispatch_branches": { "$ref": "#/$defs/count" }
+      }
+    },
+    "summary": { "$ref": "#/$defs/summary" },
+    "observations": {
+      "description": "Every observation, grouped by kind in the order of observation_codes. Within a metric kind, the highest value comes first.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/observation" }
+    },
+    "observation_codes": {
+      "description": "Every code a report can contain, whether or not this report contains it, with its meaning and number of observations.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/code_entry" }
+    },
+    "by_language": {
+      "description": "A summary per language that has at least one analyzed file.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [],
+      "properties": {
+        "python": { "$ref": "#/$defs/summary" },
+        "javascript": { "$ref": "#/$defs/summary" },
+        "typescript": { "$ref": "#/$defs/summary" },
+        "tsx": { "$ref": "#/$defs/summary" },
+        "rust": { "$ref": "#/$defs/summary" },
+        "go": { "$ref": "#/$defs/summary" }
+      }
+    },
+    "files": {
+      "description": "Every analyzed file, in path order.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/file" }
+    },
+    "clones": {
+      "description": "Groups of blocks with identical syntax after renaming local names, largest first.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/clone_group" }
+    },
+    "dependencies": { "$ref": "#/$defs/dependencies" }
+  },
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 },
+    "line": { "type": "integer", "minimum": 1 },
+    "path": { "type": "string" },
+    "language": {
+      "enum": ["python", "javascript", "typescript", "tsx", "rust", "go"]
+    },
+    "observation_kind": {
+      "enum": [
+        "cyclomatic_complexity",
+        "cognitive_complexity",
+        "parameter_count",
+        "structural_finding",
+        "duplicate_block",
+        "dependency_cycle"
+      ]
+    },
+    "rule": {
+      "enum": [
+        "chained-tuple-index",
+        "empty-catch",
+        "equality-dispatch-chain",
+        "self-assignment",
+        "unreachable-statement",
+        "unreachable-wildcard-arm",
+        "wide-tuple-return"
+      ]
+    },
+    "observation_code": {
+      "enum": [
+        "high-cyclomatic-complexity",
+        "high-cognitive-complexity",
+        "high-parameter-count",
+        "chained-tuple-index",
+        "empty-catch",
+        "equality-dispatch-chain",
+        "self-assignment",
+        "unreachable-statement",
+        "unreachable-wildcard-arm",
+        "wide-tuple-return",
+        "duplicate-block",
+        "dependency-cycle"
+      ]
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "path", "line", "message"],
+      "properties": {
+        "code": {
+          "enum": [
+            "no-supported-files",
+            "discovery-error",
+            "non-utf8-path",
+            "read-error",
+            "file-too-large",
+            "allocation-error",
+            "not-utf8",
+            "syntax-error",
+            "parse-aborted"
+          ]
+        },
+        "path": {
+          "description": "The file concerned, or null for a problem with the scan as a whole.",
+          "type": ["string", "null"]
+        },
+        "line": {
+          "description": "The first offending line of a syntax or encoding error, otherwise null.",
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "message": { "type": "string" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "files",
+        "sloc",
+        "functions",
+        "closures",
+        "max_nesting",
+        "cyclomatic",
+        "cognitive",
+        "parameters",
+        "clone_lines",
+        "duplication",
+        "rule_findings",
+        "flagged_lines",
+        "flagged_coverage"
+      ],
+      "properties": {
+        "files": { "$ref": "#/$defs/count" },
+        "sloc": { "$ref": "#/$defs/count" },
+        "functions": {
+          "description": "Functions, methods, and closures.",
+          "$ref": "#/$defs/count"
+        },
+        "closures": { "$ref": "#/$defs/count" },
+        "max_nesting": { "$ref": "#/$defs/count" },
+        "cyclomatic": { "$ref": "#/$defs/complexity_summary" },
+        "cognitive": { "$ref": "#/$defs/complexity_summary" },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["max", "high_functions"],
+          "properties": {
+            "max": { "$ref": "#/$defs/count" },
+            "high_functions": { "$ref": "#/$defs/count" }
+          }
+        },
+        "clone_lines": {
+          "description": "Code lines inside reported clones, counting every occurrence.",
+          "$ref": "#/$defs/count"
+        },
+        "duplication": {
+          "description": "clone_lines / sloc.",
+          "type": "number",
+          "minimum": 0
+        },
+        "rule_findings": { "$ref": "#/$defs/count" },
+        "flagged_lines": {
+          "description": "Code lines inside clones or rule findings, each counted once.",
+          "$ref": "#/$defs/count"
+        },
+        "flagged_coverage": {
+          "description": "flagged_lines / sloc.",
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "complexity_summary": {
+      "description": "A function's mass is its complexity times the square root of its SLOC; erosion is the share of mass in functions above the threshold.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max", "high_functions", "mass", "high_mass", "erosion"],
+      "properties": {
+        "max": { "$ref": "#/$defs/count" },
+        "high_functions": { "$ref": "#/$defs/count" },
+        "mass": { "type": "number", "minimum": 0 },
+        "high_mass": { "type": "number", "minimum": 0 },
+        "erosion": { "type": "number", "minimum": 0 }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "code",
+        "message",
+        "symbol",
+        "value",
+        "threshold",
+        "locations"
+      ],
+      "properties": {
+        "kind": { "$ref": "#/$defs/observation_kind" },
+        "code": { "$ref": "#/$defs/observation_code" },
+        "message": {
+          "description": "A one-line restatement of the structured fields.",
+          "type": "string"
+        },
+        "symbol": {
+          "description": "The measured function, or the innermost function containing a structural finding.",
+          "type": ["string", "null"]
+        },
+        "value": {
+          "description": "The metric value, the clone's token count, or the number of files in a cycle.",
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "threshold": {
+          "description": "The policy value the observation exceeds or meets.",
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "locations": {
+          "description": "One location, or every occurrence of a clone or every file in a cycle.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/location" }
+        }
+      }
+    },
+    "location": {
+      "description": "Dependency-cycle locations name whole files, so their lines are null.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "start_line", "end_line"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "start_line": { "type": ["integer", "null"], "minimum": 1 },
+        "end_line": { "type": ["integer", "null"], "minimum": 1 }
+      }
+    },
+    "code_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "kind", "description", "languages", "count"],
+      "properties": {
+        "code": { "$ref": "#/$defs/observation_code" },
+        "kind": { "$ref": "#/$defs/observation_kind" },
+        "description": { "type": "string" },
+        "languages": {
+          "description": "The languages that can produce this code.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/language" }
+        },
+        "count": { "$ref": "#/$defs/count" }
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "language",
+        "physical_lines",
+        "sloc",
+        "clone_lines",
+        "flagged_lines",
+        "functions",
+        "findings"
+      ],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "language": { "$ref": "#/$defs/language" },
+        "physical_lines": { "$ref": "#/$defs/count" },
+        "sloc": { "$ref": "#/$defs/count" },
+        "clone_lines": { "$ref": "#/$defs/count" },
+        "flagged_lines": { "$ref": "#/$defs/count" },
+        "functions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/function" }
+        },
+        "findings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/finding" }
+        }
+      }
+    },
+    "function": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "start_line",
+        "end_line",
+        "sloc",
+        "cyclomatic",
+        "cognitive",
+        "max_nesting",
+        "parameters",
+        "closure"
+      ],
+      "properties": {
+        "name": {
+          "description": "The declared name, else the name the function is assigned to, else <anonymous@line:column>.",
+          "type": "string"
+        },
+        "start_line": { "$ref": "#/$defs/line" },
+        "end_line": { "$ref": "#/$defs/line" },
+        "sloc": { "$ref": "#/$defs/count" },
+        "cyclomatic": { "type": "integer", "minimum": 1 },
+        "cognitive": { "$ref": "#/$defs/count" },
+        "max_nesting": { "$ref": "#/$defs/count" },
+        "parameters": { "$ref": "#/$defs/count" },
+        "closure": { "type": "boolean" }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "start_line", "end_line", "function"],
+      "properties": {
+        "rule": { "$ref": "#/$defs/rule" },
+        "start_line": { "$ref": "#/$defs/line" },
+        "end_line": { "$ref": "#/$defs/line" },
+        "function": {
+          "description": "The innermost function containing the finding, or null at file scope.",
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "clone_group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tokens", "locations"],
+      "properties": {
+        "tokens": { "$ref": "#/$defs/count" },
+        "locations": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/file_span" }
+        }
+      }
+    },
+    "file_span": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "start_line", "end_line"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "start_line": { "$ref": "#/$defs/line" },
+        "end_line": { "$ref": "#/$defs/line" }
+      }
+    },
+    "dependencies": {
+      "description": "Imports resolved between scanned Python and JavaScript/TypeScript files.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "analyzed_files",
+        "resolved_edges",
+        "cycles",
+        "unresolved_imports"
+      ],
+      "properties": {
+        "analyzed_files": { "$ref": "#/$defs/count" },
+        "resolved_edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from", "to"],
+            "properties": {
+              "from": { "$ref": "#/$defs/path" },
+              "to": { "$ref": "#/$defs/path" }
+            }
+          }
+        },
+        "cycles": {
+          "description": "Strongly connected components with more than one file, each sorted by path.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "items": { "$ref": "#/$defs/path" }
+          }
+        },
+        "unresolved_imports": {
+          "description": "Imports that name no scanned file, including external packages.",
+          "$ref": "#/$defs/count"
+        }
+      }
+    }
+  }
+}

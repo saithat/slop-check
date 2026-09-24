@@ -1,0 +1,4 @@
+/target/
+/.slop-check/
+/bench-results/
+__pycache__/

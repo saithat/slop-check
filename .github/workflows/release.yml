@@ -1,0 +1,159 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.*"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.85.0 --profile minimal --component rustfmt --component clippy
+      - run: cargo +1.85.0 fmt --all -- --check
+      - run: cargo +1.85.0 clippy --locked --all-targets -- -D warnings
+      - run: cargo +1.85.0 test --locked
+      - run: cargo +1.85.0 package --locked
+
+  create-release:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Validate release tag
+        run: |
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import tomllib
+
+          manifest = tomllib.loads(pathlib.Path("Cargo.toml").read_text())
+          expected = f"v{manifest['package']['version']}"
+          actual = os.environ["GITHUB_REF_NAME"]
+          if actual != expected:
+              raise SystemExit(f"tag {actual!r} does not match package version {expected!r}")
+          PY
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          --verify-tag
+          --draft
+          --generate-notes
+          --title "$GITHUB_REF_NAME"
+
+  upload-assets:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-24.04
+            musl: true
+            target_env: x86_64_unknown_linux_musl
+            target_env_upper: X86_64_UNKNOWN_LINUX_MUSL
+            smoke: true
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
+            musl: true
+            target_env: aarch64_unknown_linux_musl
+            target_env_upper: AARCH64_UNKNOWN_LINUX_MUSL
+            smoke: true
+          - target: x86_64-apple-darwin
+            os: macos-15-intel
+            deployment_target: "10.12"
+            smoke: true
+          - target: aarch64-apple-darwin
+            os: macos-15
+            deployment_target: "11.0"
+            smoke: true
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            smoke: true
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Select release Rust
+        run: |
+          rustup toolchain install 1.85.0 --profile minimal
+          rustup default 1.85.0
+      - name: Install musl compiler
+        if: matrix.musl
+        run: sudo apt-get update && sudo apt-get install --yes musl-tools
+      - name: Configure musl compiler
+        if: matrix.musl
+        shell: bash
+        run: |
+          echo "CC_${{ matrix.target_env }}=musl-gcc" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_${{ matrix.target_env_upper }}_LINKER=musl-gcc" >> "$GITHUB_ENV"
+      - name: Set macOS compatibility target
+        if: runner.os == 'macOS'
+        shell: bash
+        run: echo "MACOSX_DEPLOYMENT_TARGET=${{ matrix.deployment_target }}" >> "$GITHUB_ENV"
+      - name: Link the Windows C runtime statically
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: '"RUSTFLAGS=-C target-feature=+crt-static" >> $env:GITHUB_ENV'
+      - name: Build, archive, and upload
+        id: upload
+        uses: taiki-e/upload-rust-binary-action@f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6 # v1.30.2
+        with:
+          bin: slop-check
+          target: ${{ matrix.target }}
+          build-tool: cargo
+          archive: slop-check-$tag-$target
+          include: README.md,docs/metrics.md,docs/performance.md,docs/report.schema.json
+          leading-dir: true
+          locked: true
+          checksum: sha256
+          tar: unix
+          zip: windows
+      - name: Smoke test
+        if: matrix.smoke && runner.os != 'Windows'
+        run: |
+          target/${{ matrix.target }}/release/slop-check --version
+          target/${{ matrix.target }}/release/slop-check . > "$RUNNER_TEMP/stdout.json"
+          target/${{ matrix.target }}/release/slop-check . --output "$RUNNER_TEMP/slop-check.json"
+          cmp "$RUNNER_TEMP/stdout.json" "$RUNNER_TEMP/slop-check.json"
+          python3 -c 'import json, os; json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "slop-check.json")))'
+      - name: Smoke test (Windows)
+        if: matrix.smoke && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & "target/${{ matrix.target }}/release/slop-check.exe" --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $stdout = & "target/${{ matrix.target }}/release/slop-check.exe" . | Out-String
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $stdout | ConvertFrom-Json | Out-Null
+          $report = Join-Path $env:RUNNER_TEMP "slop-check.json"
+          & "target/${{ matrix.target }}/release/slop-check.exe" . --output $report
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-Content -Raw $report | ConvertFrom-Json | Out-Null
+
+  publish-release:
+    needs: upload-assets
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false

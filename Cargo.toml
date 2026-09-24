@@ -1,0 +1,48 @@
+[package]
+name = "slop-check"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Fast, deterministic structural code metrics"
+repository = "https://github.com/saithat/slop-check"
+homepage = "https://github.com/saithat/slop-check"
+readme = "README.md"
+keywords = ["complexity", "metrics", "static-analysis", "code-quality", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+include = [
+    "/src",
+    "/docs",
+    "/scripts/benchmark.py",
+    "/scripts/benchmark_large.py",
+    "/tests",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/README.md",
+]
+
+[dependencies]
+anyhow = "1"
+blake3 = "1"
+clap = { version = "4", features = ["derive"] }
+# 0.4.30 raised its MSRV beyond this package's Rust 1.85 floor.
+ignore = "=0.4.23"
+hashbrown = { version = "0.15", default-features = false, features = ["default-hasher", "inline-more"] }
+petgraph = "0.8"
+rayon = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tree-sitter = "0.26"
+tree-sitter-go = "0.25"
+tree-sitter-javascript = "0.25"
+tree-sitter-python = "0.25"
+tree-sitter-rust = "0.24"
+tree-sitter-typescript = "0.23"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
