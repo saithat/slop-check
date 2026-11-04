@@ -213,23 +213,30 @@ fn clone_and_rule_coverage_is_a_union() {
 
 #[test]
 fn complexity_summary_matches_measured_mass() {
-    let mut source = String::from("def small():\n    return 0\n\ndef branch(values):\n");
-    for index in 0..11 {
+    let mut source = String::from("def small():\n    return 0\n\ndef boundary(values):\n");
+    for index in 0..14 {
+        writeln!(source, "    if values[{index}]: return {index}").unwrap();
+    }
+    source.push_str("    return -1\n\ndef branch(values):\n");
+    for index in 0..15 {
         writeln!(source, "    if values[{index}]: return {index}").unwrap();
     }
     source.push_str("    return -1\n");
     let report = report(&[("a.py", &source)]);
 
-    let high_mass = 12.0 * 13_f64.sqrt();
+    assert_eq!(report.files[0].functions[1].cyclomatic, 15);
+    assert_eq!(report.files[0].functions[2].cyclomatic, 16);
+    let high_mass = 16.0 * 17_f64.sqrt();
     let cyclomatic = &report.summary.cyclomatic;
     assert_eq!(cyclomatic.high_functions, 1);
     assert!((cyclomatic.high_mass - high_mass).abs() < 1e-12);
-    assert!((cyclomatic.erosion - high_mass / (high_mass + 2_f64.sqrt())).abs() < 1e-12);
-    assert_eq!(report.summary.cognitive.high_functions, 1);
+    assert!((cyclomatic.erosion - high_mass / (high_mass + 60.0 + 2_f64.sqrt())).abs() < 1e-12);
+    assert_eq!(report.summary.cognitive.high_functions, 2);
     assert_eq!(
         kinds(&report),
         [
             ObservationKind::Metric(Metric::Cyclomatic),
+            ObservationKind::Metric(Metric::Cognitive),
             ObservationKind::Metric(Metric::Cognitive)
         ]
     );
@@ -263,11 +270,11 @@ fn long_parameter_lists_are_observed() {
 #[test]
 fn observations_follow_kind_order_then_strength() {
     let mut complex = String::from("def weaker(v):\n");
-    for index in 0..11 {
+    for index in 0..15 {
         writeln!(complex, "    if v[{index}]: return {index}").unwrap();
     }
     complex.push_str("    return -1\n\ndef stronger(v):\n");
-    for index in 0..12 {
+    for index in 0..16 {
         writeln!(complex, "    if v[{index}]: return {index}").unwrap();
     }
     complex.push_str("    return -1\n");

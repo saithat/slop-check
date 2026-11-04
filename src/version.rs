@@ -2,7 +2,7 @@
 
 pub const TOOL_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Changes whenever a metric or rule definition changes.
-pub const METRIC_VERSION: &str = "metrics/5";
+pub const METRIC_VERSION: &str = "metrics/6";
 /// Changes whenever the JSON report's shape changes.
 pub const SCHEMA_VERSION: u32 = 6;
 

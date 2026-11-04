@@ -1,4 +1,4 @@
-# Metric definitions (`metrics/5`)
+# Metric definitions (`metrics/6`)
 
 All metrics are static structural measurements. A result is evidence for review,
 not proof of poor design, semantic equivalence, or an AI author.
@@ -80,10 +80,11 @@ depth. Simple functions may have cognitive complexity 0.
 
 For each function, `mass = cyclomatic × sqrt(function SLOC)`. Structural erosion
 is the share of total mass in functions **strictly above** the fixed reporting
-threshold of 10. This is the formula from
+threshold of 15. This is the formula from
 [SlopCodeBench §2.3](https://arxiv.org/pdf/2603.24755v2).
 
-Cognitive erosion substitutes cognitive complexity and its separate threshold.
+Cognitive erosion substitutes cognitive complexity and uses its separate
+threshold of 10.
 Zero denominators yield 0. `summary.cyclomatic` and `summary.cognitive` each
 report `max`, `high_functions`, `mass`, `high_mass`, and `erosion`, so the ratio
 cannot hide the underlying changes.

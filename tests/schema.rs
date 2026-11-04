@@ -145,7 +145,7 @@ fn fixture_report() -> Value {
         fs::write(target, source).unwrap();
     };
     let mut branchy = String::from("def branch(values):\n");
-    for index in 0..11 {
+    for index in 0..15 {
         branchy.push_str(&format!("    if values[{index}]: return {index}\n"));
     }
     branchy.push_str("    return -1\n");

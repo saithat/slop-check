@@ -281,7 +281,7 @@ fn output_write_failures_are_errors() {
 fn report_contents_are_complete_and_stable() {
     let root = TempDir::new().unwrap();
     let mut complex = String::from("def branch(values):\n");
-    for index in 0..11 {
+    for index in 0..15 {
         writeln!(complex, "    if values[{index}]: return {index}").unwrap();
     }
     complex.push_str("    return -1\n");
@@ -313,12 +313,14 @@ fn report_contents_are_complete_and_stable() {
 
     assert_eq!(r["schema_version"], 6);
     assert_eq!(r["tool_version"], VERSION);
-    assert_eq!(r["metric_version"], "metrics/5");
+    assert_eq!(r["metric_version"], "metrics/6");
     assert_eq!(r["scan_scope"]["kind"], "directory");
     assert_eq!(r["complete"], true);
     assert_eq!(r["diagnostics"], json!([]));
+    assert_eq!(r["policy"]["cyclomatic_threshold"], 15);
+    assert_eq!(r["policy"]["cognitive_threshold"], 10);
     assert_eq!(r["summary"]["cyclomatic"]["high_functions"], 1);
-    assert_eq!(r["summary"]["cognitive"]["max"], 11);
+    assert_eq!(r["summary"]["cognitive"]["max"], 15);
     assert_eq!(
         r["summary"]["parameters"],
         json!({"max": 1, "high_functions": 0})
@@ -332,7 +334,7 @@ fn report_contents_are_complete_and_stable() {
         ])
     );
 
-    let location = json!({"path": "complex.py", "start_line": 1, "end_line": 13});
+    let location = json!({"path": "complex.py", "start_line": 1, "end_line": 17});
     let group = &r["clones"][0];
     assert_eq!(
         r["observations"],
@@ -340,18 +342,18 @@ fn report_contents_are_complete_and_stable() {
             {
                 "kind": "cyclomatic_complexity",
                 "code": "high-cyclomatic-complexity",
-                "message": "cyclomatic complexity 12, above reporting threshold 10",
+                "message": "cyclomatic complexity 16, above reporting threshold 15",
                 "symbol": "branch",
-                "value": 12,
-                "threshold": 10,
+                "value": 16,
+                "threshold": 15,
                 "locations": [location],
             },
             {
                 "kind": "cognitive_complexity",
                 "code": "high-cognitive-complexity",
-                "message": "cognitive complexity 11, above reporting threshold 10",
+                "message": "cognitive complexity 15, above reporting threshold 10",
                 "symbol": "branch",
-                "value": 11,
+                "value": 15,
                 "threshold": 10,
                 "locations": [location],
             },

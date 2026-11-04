@@ -24,7 +24,7 @@ pub struct Policy {
 }
 
 pub const POLICY: Policy = Policy {
-    cyclomatic_threshold: 10,
+    cyclomatic_threshold: 15,
     cognitive_threshold: 10,
     parameter_threshold: 5,
     min_clone_lines: 5,
