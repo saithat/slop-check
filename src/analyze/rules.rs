@@ -367,9 +367,19 @@ fn equality_operands<'tree>(condition: Node<'tree>, code: Code<'_>) -> Option<[N
     }
 }
 
+/// A literal, or a qualified name with a capitalized segment, like a type, enum member,
+/// or constant (`Kind.a`, `Color::RED`, `pkg.Max`). Other member accesses such as `b.x`
+/// read object state.
 fn is_constant(operand: Node<'_>, code: Code<'_>) -> bool {
     let syntax = code.syntax(operand);
-    syntax.is_literal() || syntax == Syntax::QualifiedName
+    if syntax.is_literal() {
+        return true;
+    }
+    syntax == Syntax::QualifiedName
+        && code
+            .text(operand)
+            .split(['.', ':'])
+            .any(|segment| segment.trim().starts_with(|c: char| c.is_uppercase()))
 }
 
 #[cfg(test)]
@@ -588,6 +598,15 @@ mod tests {
             (
                 Javascript,
                 "if (x === 1) {} else if (x > 2) {} else if (x === 3) {}\n",
+            ),
+            // Another object's field is state, not a case label.
+            (
+                Javascript,
+                "if (a.x === b.x) {} else if (a.x === c.y) {} else if (a.x === d.z) {}\n",
+            ),
+            (
+                Python,
+                "if a.x == b.x:\n    pass\nelif a.x == c.y:\n    pass\nelif a.x == d.z:\n    pass\n",
             ),
             // A variable is not a case label: in Rust it would bind a new name.
             (

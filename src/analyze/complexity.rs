@@ -46,6 +46,8 @@ pub(super) fn decision(
     match syntax {
         Syntax::Binary => logical_operator(node, context, code),
         Syntax::If if is_else_if(node, context) => Decision::FLAT_BRANCH,
+        // A Python match guard only makes its arm refutable, as a Rust guard does.
+        Syntax::Filter if is_match_guard(context) => Decision::NONE,
         Syntax::If | Syntax::Loop | Syntax::Filter | Syntax::Catch | Syntax::Conditional => {
             Decision::BRANCH
         }
@@ -124,7 +126,17 @@ fn else_keyword(context: &Context<'_>, code: Code<'_>) -> Decision {
     }
 }
 
+fn is_match_guard(context: &Context<'_>) -> bool {
+    context.field == Some(Field::Guard.name())
+        && context
+            .parent
+            .is_some_and(|parent| parent.syntax == Syntax::MatchArm)
+}
+
 /// A catch-all arm is not a decision: `_`, or an unguarded pattern that binds any value.
+/// A bare Rust identifier binds only when it is not a constant or unit variant, which
+/// syntax alone cannot tell; by convention those are capitalized, so only a lowercase
+/// identifier is treated as a binding.
 fn is_fallback_arm(arm: Node<'_>, code: Code<'_>) -> bool {
     let Some(pattern) = arm.field(Field::Pattern).or_else(|| arm.named_child(0)) else {
         return false;
@@ -145,9 +157,12 @@ fn is_fallback_arm(arm: Node<'_>, code: Code<'_>) -> bool {
         Language::Python => pattern.named_child(0).is_some_and(|capture| {
             code.syntax(capture) == Syntax::DottedName && capture.named_child_count() == 1
         }),
-        Language::Rust => pattern
-            .named_child(0)
-            .is_some_and(|capture| code.syntax(capture) == Syntax::Identifier),
+        Language::Rust => pattern.named_child(0).is_some_and(|capture| {
+            code.syntax(capture) == Syntax::Identifier
+                && code
+                    .text(capture)
+                    .starts_with(|c: char| c == '_' || c.is_lowercase())
+        }),
         Language::Javascript | Language::Typescript | Language::Tsx | Language::Go => false,
     }
 }

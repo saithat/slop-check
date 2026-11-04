@@ -31,7 +31,7 @@ pub(super) fn name(function: Node<'_>, context: &Context<'_>, code: Code<'_>) ->
 }
 
 /// Counts declared parameters, including receivers such as Rust `self`. Python's bare
-/// `/` and `*` separators are not parameters, and each name in a Go group such as
+/// `/` and `*` separators and Rust parameter attributes are not parameters, and each name in a Go group such as
 /// `x, y int` is one.
 pub(super) fn parameter_count(function: Node<'_>, code: Code<'_>) -> u32 {
     let Some(parameters) = function.field(Field::Parameters) else {
@@ -44,7 +44,7 @@ pub(super) fn parameter_count(function: Node<'_>, code: Code<'_>) -> u32 {
         .filter(|parameter| {
             !matches!(
                 code.syntax(*parameter),
-                Syntax::Comment | Syntax::ParameterSeparator
+                Syntax::Comment | Syntax::ParameterSeparator | Syntax::Attribute
             )
         })
         .map(|parameter| match code.language {

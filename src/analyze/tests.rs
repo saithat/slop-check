@@ -43,6 +43,12 @@ fn python_interpolated_and_byte_strings_are_executable_code() {
 }
 
 #[test]
+fn python_string_lines_between_escapes_are_code() {
+    let source = "X = \"\"\"first\\n\nsecond\nthird\"\"\"\n";
+    assert_eq!(analysis(Python, source).code_lines.count(), 3);
+}
+
+#[test]
 fn nested_functions_own_their_decisions_and_lines() {
     let source = "def outer(x):\n    def inner(y):\n        if y:\n            return 1\n        return 0\n    if x:\n        return inner(x)\n    return 0\n";
     for function in analysis(Python, source).functions {
@@ -186,9 +192,29 @@ fn irrefutable_match_captures_do_not_add_branches() {
 #[test]
 fn guarded_irrefutable_match_arms_are_decisions() {
     let source = "def f(x, enabled):\n    match x:\n        case _ if enabled:\n            return 1\n        case _:\n            return 2\n";
-    assert_eq!(complexity(Python, source), (3, 3));
+    assert_eq!(complexity(Python, source), (2, 1));
     let source = "fn f(x: u8, enabled: bool) -> u8 { match x { value if enabled => 1, _ => 2 } }";
     assert_eq!(complexity(Rust, source), (2, 1));
+}
+
+#[test]
+fn rust_constant_and_variant_arms_are_decisions() {
+    for (source, expected) in [
+        (
+            "const RED: u8 = 0;\nconst GREEN: u8 = 1;\nfn f(c: u8) -> u8 { match c { RED => 10, GREEN => 20, _ => 0 } }",
+            3,
+        ),
+        (
+            "use std::cmp::Ordering::*;\nfn f(o: std::cmp::Ordering) -> u8 { match o { Less => 1, Equal => 2, Greater => 3 } }",
+            4,
+        ),
+        (
+            "fn f(x: Option<u8>) -> u8 { match x { Some(v) => v, None => 0 } }",
+            3,
+        ),
+    ] {
+        assert_eq!(complexity(Rust, source).0, expected, "{source}");
+    }
 }
 
 #[test]
@@ -208,6 +234,11 @@ fn parameter_counts_handle_go_groups_and_python_separators() {
         (Python, "def f(a, /, b, *, c):\n    return a + b + c\n", 3),
         (Javascript, "const f = x => x + 1;", 1),
         (Rust, "impl T { fn f(&self, a: i32) {} }", 2),
+        (
+            Rust,
+            "fn f(#[allow(unused)] a: u8, #[cfg(test)] b: u8) {}",
+            2,
+        ),
     ] {
         assert_eq!(
             function(language, source).parameters,

@@ -86,6 +86,22 @@ fn different_literals_are_not_clones() {
 }
 
 #[test]
+fn string_text_around_escapes_distinguishes_clones() {
+    let strings = |function: &str, word: &str| {
+        let mut source = format!("def {function}(v):\n");
+        for index in 0..10 {
+            writeln!(source, "    v{index} = v + \"{word}{index}\\n\"").unwrap();
+        }
+        source + "    return v9\n"
+    };
+    let report = report(&[
+        ("a.py", &strings("alpha", "alpha")),
+        ("b.py", &strings("beta", "omega")),
+    ]);
+    assert_eq!(report.summary.clone_lines, 0);
+}
+
+#[test]
 fn normalized_clones_work_in_every_primary_language() {
     let mut files = vec![];
     for (language, extension) in [

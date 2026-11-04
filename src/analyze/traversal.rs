@@ -144,7 +144,9 @@ impl<'tree, 'source> Traversal<'tree, 'source> {
         imports::inspect(node, syntax, self.code, &mut self.imports);
 
         let mut hash = SyntaxHash::new(node.kind());
-        let leaf = node.child_count() == 0;
+        // Python's `string_content` keeps escape sequences as children; treating it as
+        // one leaf retains the literal text around them, as other grammars do.
+        let leaf = node.child_count() == 0 || node.kind() == "string_content";
         let tokens = if leaf {
             self.record_leaf(node, syntax, &context, &mut hash)
         } else {

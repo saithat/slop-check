@@ -19,7 +19,8 @@ lambdas are included and marked with `closure: true`; bodyless signatures are
 not. Function names are inferred where possible, and anonymous names include
 line and column.
 
-Parameter count excludes Python `/` and bare `*` separators, includes Rust
+Parameter count excludes Python `/` and bare `*` separators and Rust parameter
+attributes such as `#[allow(unused)]`, includes Rust
 `self` and Python `self`/`cls`, and counts Go grouped names individually. Go
 receivers are not parameters. Destructured parameters count as one parameter.
 Functions and closures with **more than 5** parameters are reported as
@@ -40,7 +41,11 @@ function, using the bundled language grammar:
 | Go | `if`, `for`, non-default expression/type switch cases, `&&`/`||` |
 
 Irrefutable Python and Rust capture arms are treated as fallbacks when they have
-no guard. This is a syntax-based McCabe-style approximation, not a full
+no guard. A Rust identifier pattern counts as a capture only when it starts with a
+lowercase letter or `_`; capitalized identifiers such as `RED`, `None`, or a
+glob-imported `Less` are treated as constants or variants, so their arms are
+decisions. A match guard makes its arm a decision but is not counted separately,
+in Python or Rust. This is a syntax-based McCabe-style approximation, not a full
 control-flow graph. For example, a Rust loop counts even when it has no
 conditional exit; optional
 chaining, Go select cases, pattern alternatives within one arm, Python asserts,
@@ -133,7 +138,7 @@ Reference: [PMD CPD](https://pmd.github.io/pmd/pmd_userdocs_cpd.html).
 | `wide-tuple-return` | Rust, TS/TSX, Python | A declared return type that is a tuple of 3 or more unlabeled values, such as `-> (u32, u32, bool)` |
 | `chained-tuple-index` | Rust | A tuple position read through another tuple position, such as `pair.1[0].1` or `nested.0.1` |
 | `unreachable-wildcard-arm` | Rust | A `_ =>` arm, without a guard, whose body is only `unreachable!()` or `panic!()` |
-| `equality-dispatch-chain` | All | An `if`/`else if` chain of 3 or more conditions, each comparing the same expression with `==`/`===` against a literal or a qualified name such as `Kind.A` or `Kind::A` |
+| `equality-dispatch-chain` | All | An `if`/`else if` chain of 3 or more conditions, each comparing the same expression with `==`/`===` against a literal or a qualified name with a capitalized segment, such as `Kind.A`, `Kind::A`, or `pkg.Max` (so `a.x == b.x` is not a case label) |
 
 The unreachable rule does not prove general reachability. It does not expand
 macros or analyze calls such as `panic()`/`sys.exit()`. Function declarations are
