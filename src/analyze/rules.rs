@@ -1,4 +1,4 @@
-//! Structural rules: the versioned `structural/2` rule pack.
+//! Structural rules: the versioned `structural/3` rule pack.
 //!
 //! Each rule is a purely syntactic check. A finding marks code for review; it is not a
 //! proof of a defect.
@@ -25,7 +25,7 @@ pub(super) fn inspect(
             unreachable_statements(node, code, out);
             None
         }
-        Syntax::Assignment => self_assignment(node, code),
+        Syntax::Assignment => self_assignment(node, context, code),
         Syntax::Catch => empty_catch(node, code),
         Syntax::Function | Syntax::Closure | Syntax::FunctionSignature => {
             wide_tuple_return(node, context, code)
@@ -54,8 +54,9 @@ fn named_children<'tree>(node: Node<'tree>, code: Code<'_>) -> Vec<Node<'tree>> 
         .collect()
 }
 
-/// `x = x`: a plain assignment of an identifier to itself.
-fn self_assignment(node: Node<'_>, code: Code<'_>) -> Option<Finding> {
+/// `x = x`: a plain assignment of an identifier to itself. In a Python class body this
+/// copies an enclosing-scope name into a class attribute, so it is not reported there.
+fn self_assignment(node: Node<'_>, context: &Context<'_>, code: Code<'_>) -> Option<Finding> {
     let (left, right) = (node.field(Field::Left)?, node.field(Field::Right)?);
     let plain = node
         .field(Field::Operator)
@@ -63,7 +64,12 @@ fn self_assignment(node: Node<'_>, code: Code<'_>) -> Option<Finding> {
     let same_name = code.syntax(left) == Syntax::Identifier
         && code.syntax(right) == Syntax::Identifier
         && code.text(left) == code.text(right);
-    (plain && same_name).then(|| finding(Rule::SelfAssignment, node))
+    let class_attribute = code.language == Language::Python
+        && context
+            .grandparent
+            .and_then(|block| block.node.parent())
+            .is_some_and(|owner| code.syntax(owner) == Syntax::Class);
+    (plain && same_name && !class_attribute).then(|| finding(Rule::SelfAssignment, node))
 }
 
 /// A handler whose body holds nothing but comments or `pass`.
@@ -81,7 +87,8 @@ fn empty_catch(node: Node<'_>, code: Code<'_>) -> Option<Finding> {
 }
 
 /// Sibling statements after an unconditional `return`, `throw`, `raise`, `break`, or
-/// `continue`. Function declarations are exempt because they may be hoisted.
+/// `continue`. Function declarations are exempt because they may be hoisted, except in
+/// Python, where a `def` is an ordinary statement.
 fn unreachable_statements(block: Node<'_>, code: Code<'_>, out: &mut Vec<Finding>) {
     if !Rule::UnreachableStatement.applies_to(code.language) {
         return;
@@ -103,7 +110,8 @@ fn unreachable_statements(block: Node<'_>, code: Code<'_>, out: &mut Vec<Finding
             Syntax::Labeled => terminated = false,
             _ => {}
         }
-        if terminated && !syntax.is_function_like() {
+        let hoisted = syntax.is_function_like() && code.language != Language::Python;
+        if terminated && !hoisted {
             out.push(finding(Rule::UnreachableStatement, statement));
         }
         terminated |= is_jump(statement, code) && !conditional;
@@ -418,6 +426,27 @@ mod tests {
                 (Rule::UnreachableStatement, 9),
             ]
         );
+    }
+
+    #[test]
+    fn python_class_attribute_copies_are_not_self_assignments() {
+        let source =
+            "x = 1\nclass A:\n    x = x\n    def f(self, y):\n        y = y\n        return y\n";
+        assert_eq!(findings(Python, source), [(Rule::SelfAssignment, 5)]);
+    }
+
+    #[test]
+    fn python_definitions_after_a_return_are_unreachable() {
+        let source = "def f():\n    return 1\n    def g():\n        pass\n    @dec\n    def h():\n        pass\n";
+        assert_eq!(
+            findings(Python, source),
+            [
+                (Rule::UnreachableStatement, 3),
+                (Rule::UnreachableStatement, 5)
+            ]
+        );
+        let source = "function f() { return g(); function g() { return 1; } }\n";
+        assert_eq!(rules(Javascript, source), []);
     }
 
     #[test]

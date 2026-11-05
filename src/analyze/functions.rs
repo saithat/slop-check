@@ -14,12 +14,16 @@ pub(super) fn name(function: Node<'_>, context: &Context<'_>, code: Code<'_>) ->
     }
     // Closures usually have no name of their own; the assignment, property, or keyword
     // argument that immediately holds them names them instead.
-    let owner = context.parent.and_then(|parent| {
-        [Field::Name, Field::Left, Field::Key]
-            .into_iter()
-            .filter_map(|field| parent.node.field(field))
-            .find(|name| name.id() != function.id())
-    });
+    // An operand of `a || function () {}` or `cb or lambda: 0` is not held by name.
+    let owner = context
+        .parent
+        .filter(|parent| parent.syntax != Syntax::Binary)
+        .and_then(|parent| {
+            [Field::Name, Field::Left, Field::Key]
+                .into_iter()
+                .filter_map(|field| parent.node.field(field))
+                .find(|name| name.id() != function.id())
+        });
     match owner {
         Some(owner) => code.text(owner).to_owned(),
         None => format!(

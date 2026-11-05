@@ -34,8 +34,14 @@ Every run produces one JSON report. It goes to stdout, or to FILE with
 `-o, --output FILE`, in which case stderr confirms the path. There are no other
 options.
 
-Repository ignore files and common generated, dependency, and build directories
-are respected automatically. The measurement policy is fixed and recorded in
+`.gitignore` and `.ignore` files inside the scanned tree are respected; ignore
+files in parent directories and global git excludes are not, so a path scans the
+same way on every machine. Directories named `.git`, `.slop-check`,
+`node_modules`, `target`, `vendor`, `dist`, `build`, `.venv`, `venv`,
+`__pycache__`, `.tox`, and `.mypy_cache` are skipped at any depth below the scan
+root, even when they hold real sources; scan such a directory directly to include
+it. Symbolic links inside the tree are not followed, and the files they point to
+are skipped without a diagnostic. The measurement policy is fixed and recorded in
 every report so results from the same version and scope are comparable.
 
 ## Report
@@ -116,7 +122,7 @@ Scanning is read-only. `slop-check` does not execute source code, invoke package
 managers or compilers, write into the scanned repository, or use the network.
 
 There is no repository-size cap. Large files are scheduled automatically to
-limit simultaneous parser memory use; files over 64 MiB run alone. Parsing still
+limit simultaneous parser memory use; files over 32 MiB run alone. Parsing still
 holds a complete syntax tree in memory. The bundled parser requires individual
 files smaller than 4 GiB; larger files produce an explicit diagnostic.
 

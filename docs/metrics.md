@@ -9,7 +9,9 @@ Physical lines include comments and blanks. SLOC counts lines containing a
 non-whitespace syntax leaf outside comments and Python module/class/function
 docstrings. Blank lines within multiline strings are not SLOC. Closing braces
 and other punctuation count as code. A line is counted once regardless of the
-number of syntax leaves on it.
+number of syntax leaves on it. Lines end at `\n` (so `\r\n` works too). Bare `\r`
+line endings are not line breaks: such a file counts as a single line, or is a
+syntax error where the grammar requires line breaks, as Python's does.
 
 Function SLOC belongs to the closest enclosing function. A nested function's
 lines therefore do not inflate its parent, while a physical line containing
@@ -132,9 +134,9 @@ Reference: [PMD CPD](https://pmd.github.io/pmd/pmd_userdocs_cpd.html).
 
 | Rule | Languages | Detection |
 | --- | --- | --- |
-| `self-assignment` | Python, JS/TS, Rust | Plain identifier assignment to the same identifier |
+| `self-assignment` | Python, JS/TS, Rust | Plain identifier assignment to the same identifier, except in a Python class body, where `x = x` copies an enclosing name into a class attribute |
 | `empty-catch` | Python, JS/TS | An `except` or `catch` containing only comments or `pass` |
-| `unreachable-statement` | All | Direct sibling statements after an unconditional return/throw/raise/break/continue in a block; Rust explicit return/break/continue expression statements are included |
+| `unreachable-statement` | All | Direct sibling statements after an unconditional return/throw/raise/break/continue in a block; Rust explicit return/break/continue expression statements are included. Function declarations are exempt because they may be hoisted, except in Python |
 | `wide-tuple-return` | Rust, TS/TSX, Python | A declared return type that is a tuple of 3 or more unlabeled values, such as `-> (u32, u32, bool)` |
 | `chained-tuple-index` | Rust | A tuple position read through another tuple position, such as `pair.1[0].1` or `nested.0.1` |
 | `unreachable-wildcard-arm` | Rust | A `_ =>` arm, without a guard, whose body is only `unreachable!()` or `panic!()` |
@@ -170,7 +172,7 @@ intent that the code currently leaves implicit:
 
 `flagged_lines` is the union of clone and rule ranges intersected with SLOC;
 `flagged_coverage = flagged_lines / total SLOC`. `rule_findings` is a count of
-distinct rule/location findings. These rules are the versioned `structural/2`
+distinct rule/location findings. These rules are the versioned `structural/3`
 pack, not SlopCodeBench's 137-rule set. A zero therefore
 means only that these rules and clone thresholds found no covered lines. The
 current CLI has no rule-pack loading or per-rule suppression. Inspect the source
@@ -188,10 +190,13 @@ The dependency graph resolves only scanned files:
   `.js` → `.ts`/`.tsx`, `.mjs` → `.mts`, and `.cjs` → `.cts` fallbacks are supported.
   A specifier without a script extension, including dotted names such as
   `./user.service`, has each script extension and `/index` tried in turn.
-- Package manifests, TS path aliases, Python custom source roots, dynamic imports,
+  Only JS/TS files are targets, so `import x from './c.py'` stays unresolved.
+- Package manifests, TS path aliases, Python custom source roots, non-literal
+  dynamic imports such as `import(name)`,
   Rust modules, and Go package graphs are not resolved.
 
-`unresolved_imports` includes external dependencies as well as unsupported local
+`unresolved_imports` counts each imported module, so `import os, sys` is two. It
+includes external dependencies as well as unsupported local
 resolution. It is not an error count. Conditional/type-only imports still form
 structural edges; a reported component need not be a runtime import failure.
 
@@ -207,8 +212,9 @@ schema. In outline:
 
 - Every object always has all of its keys. A value that does not apply is `null`,
   for example `symbol` on a duplicate block or the lines of a dependency-cycle file.
-- `observations` holds every observation in the order of `observation_codes`, and
-  within a metric, strongest first. Each one has a `kind`, `code`, `message`,
+- `observations` holds every observation grouped by kind, in the order of
+  `observation_codes`. Within a metric kind the strongest comes first; structural
+  findings are in file and line order, whatever their rule code. Each one has a `kind`, `code`, `message`,
   `symbol` (the measured function, or the innermost function containing a finding),
   `value`, `threshold`, and `locations`.
 - `observation_codes` lists every code the tool can emit, even when this report has

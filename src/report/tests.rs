@@ -212,19 +212,21 @@ fn clone_and_rule_coverage_is_a_union() {
             1,
         )
     };
+    // One finding sits outside every clone, so the union is larger than either set.
+    let outside = "\ndef other(z):\n    z = z\n    return z\n";
     let report = report(&[
-        ("a.py", &with_finding("alpha", "input", "step")),
+        ("a.py", &(with_finding("alpha", "input", "step") + outside)),
         ("b.py", &with_finding("beta", "value", "result")),
     ]);
     assert!(report.summary.clone_lines > 0);
-    assert_eq!(report.summary.flagged_lines, report.summary.clone_lines);
-    assert_eq!(report.summary.rule_findings, 2);
+    assert_eq!(report.summary.flagged_lines, report.summary.clone_lines + 1);
+    assert_eq!(report.summary.rule_findings, 3);
     let kinds = kinds(&report);
     assert!(kinds.contains(&ObservationKind::DuplicateBlock));
     let findings = kinds
         .iter()
         .filter(|kind| **kind == ObservationKind::StructuralFinding);
-    assert_eq!(findings.count(), 2);
+    assert_eq!(findings.count(), 3);
 }
 
 #[test]

@@ -33,7 +33,7 @@ pub const POLICY: Policy = Policy {
     min_dispatch_branches: 3,
 };
 
-/// A structural rule from the versioned `structural/2` rule pack.
+/// A structural rule from the versioned `structural/3` rule pack.
 ///
 /// Variants are declared in the order of their codes, which is the order findings on
 /// one line are reported in.
@@ -305,6 +305,19 @@ pub enum DiagnosticCode {
 }
 
 impl DiagnosticCode {
+    #[cfg(test)]
+    pub const ALL: [Self; 9] = [
+        Self::NoSupportedFiles,
+        Self::DiscoveryError,
+        Self::NonUtf8Path,
+        Self::ReadError,
+        Self::FileTooLarge,
+        Self::AllocationError,
+        Self::NotUtf8,
+        Self::SyntaxError,
+        Self::ParseAborted,
+    ];
+
     pub fn code(self) -> &'static str {
         match self {
             Self::NoSupportedFiles => "no-supported-files",
@@ -364,6 +377,31 @@ mod tests {
         let mut codes = Rule::ALL.map(Rule::code);
         codes.sort_unstable();
         assert_eq!(codes, Rule::ALL.map(Rule::code));
+    }
+
+    #[test]
+    fn the_schema_lists_every_diagnostic_code() {
+        // An exhaustive match fails to compile when a variant is added without ALL.
+        for code in DiagnosticCode::ALL {
+            match code {
+                DiagnosticCode::NoSupportedFiles
+                | DiagnosticCode::DiscoveryError
+                | DiagnosticCode::NonUtf8Path
+                | DiagnosticCode::ReadError
+                | DiagnosticCode::FileTooLarge
+                | DiagnosticCode::AllocationError
+                | DiagnosticCode::NotUtf8
+                | DiagnosticCode::SyntaxError
+                | DiagnosticCode::ParseAborted => {}
+            }
+        }
+        let schema: serde_json::Value =
+            serde_json::from_str(include_str!("../docs/report.schema.json")).unwrap();
+        let listed = &schema["$defs"]["diagnostic"]["properties"]["code"]["enum"];
+        assert_eq!(
+            *listed,
+            serde_json::json!(DiagnosticCode::ALL.map(DiagnosticCode::code))
+        );
     }
 
     #[test]

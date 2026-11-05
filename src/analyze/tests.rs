@@ -265,6 +265,15 @@ fn closures_take_the_name_that_holds_them() {
         ["f", "obj.g", "<anonymous@3:5>"]
     );
     assert_eq!(names(Python, "sorted(xs, key=lambda x: x)\n"), ["key"]);
+    // An operand of `||` or `or` is not held by the name on the left.
+    assert_eq!(
+        names(Javascript, "const h = options.onError || function () {};\n"),
+        ["<anonymous@1:30>"]
+    );
+    assert_eq!(
+        names(Python, "fallback = cb or lambda: 0\n"),
+        ["<anonymous@1:18>"]
+    );
 }
 
 #[test]

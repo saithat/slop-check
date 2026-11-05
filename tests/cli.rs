@@ -570,6 +570,48 @@ fn size_bands_preserve_file_order_and_include_files_larger_than_the_allowance() 
 
 #[cfg(unix)]
 #[test]
+fn discovery_errors_name_the_unreadable_directory_relatively() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = TempDir::new().unwrap();
+    write(root.path(), "keep.py", "x = 1\n");
+    write(root.path(), "locked/inner.py", "y = 2\n");
+    let locked = root.path().join("locked");
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+    // Root can read the directory anyway, so there is nothing to test.
+    if fs::read_dir(&locked).is_ok() {
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+        return;
+    }
+    let Run { output, report, .. } = run(root.path());
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    let diagnostics = report["diagnostics"].as_array().unwrap();
+    assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+    assert_eq!(diagnostics[0]["code"], "discovery-error");
+    assert_eq!(diagnostics[0]["path"], "locked");
+    let message = diagnostics[0]["message"].as_str().unwrap();
+    assert!(
+        !message.contains(root.path().to_str().unwrap()),
+        "{message}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symlinked_scan_path_is_labelled_by_its_own_name() {
+    let outside = TempDir::new().unwrap();
+    write(outside.path(), "real.py", "x = 1\n");
+    let links = TempDir::new().unwrap();
+    fs::create_dir(links.path().join(".git")).unwrap();
+    let link = links.path().join("alias.py");
+    std::os::unix::fs::symlink(outside.path().join("real.py"), &link).unwrap();
+    let r = report(&link);
+    assert_eq!(r["scan_scope"], json!({"kind": "file", "path": "alias.py"}));
+}
+
+#[cfg(unix)]
+#[test]
 fn directory_symlinks_are_not_followed() {
     let root = TempDir::new().unwrap();
     let outside = TempDir::new().unwrap();

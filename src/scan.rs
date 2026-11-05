@@ -71,7 +71,7 @@ fn discover(path: &Path) -> Result<Discovery> {
         path.display()
     );
     let input = path.canonicalize().context("resolve scan path")?;
-    let scope = scan_scope(&input);
+    let scope = scan_scope(path, &input);
     let root = if input.is_file() {
         input.parent().context("file parent")?
     } else {
@@ -114,14 +114,7 @@ impl Discovered {
     fn from_walk(entry: Result<ignore::DirEntry, ignore::Error>, root: &Path) -> Self {
         let entry = match entry {
             Ok(entry) => entry,
-            Err(error) => {
-                return Self::Problem(Diagnostic {
-                    code: DiagnosticCode::DiscoveryError,
-                    path: None,
-                    line: None,
-                    message: error.to_string(),
-                });
-            }
+            Err(error) => return Self::Problem(discovery_error(&error, root)),
         };
         let language = Language::detect(entry.path())
             .filter(|_| entry.file_type().is_some_and(|kind| kind.is_file()));
@@ -145,21 +138,74 @@ impl Discovered {
     }
 }
 
-fn scan_scope(input: &Path) -> ScanScope {
+/// A walk failure, located relative to the scan root. Its message omits the absolute
+/// path, so the report does not depend on the checkout directory.
+fn discovery_error(error: &ignore::Error, root: &Path) -> Diagnostic {
+    let mut location = None;
+    let mut cause = error;
+    loop {
+        match cause {
+            ignore::Error::WithPath { path, err } => {
+                location.get_or_insert(path);
+                cause = err;
+            }
+            ignore::Error::WithDepth { err, .. } | ignore::Error::WithLineNumber { err, .. } => {
+                cause = err;
+            }
+            _ => break,
+        }
+    }
+    let path = location
+        .and_then(|path| path.strip_prefix(root).ok())
+        .filter(|relative| !relative.as_os_str().is_empty())
+        .map(RelativePath::lossy);
+    // Walk I/O errors repeat the absolute path in their text; keep only the OS reason.
+    let message = match cause {
+        ignore::Error::Io(io) => io.raw_os_error().map_or_else(
+            || io.kind().to_string(),
+            |code| std::io::Error::from_raw_os_error(code).to_string(),
+        ),
+        other => other.to_string(),
+    };
+    Diagnostic {
+        code: DiagnosticCode::DiscoveryError,
+        path,
+        line: None,
+        message,
+    }
+}
+
+/// `requested` is the path as given and `input` its canonical form. A symlink is
+/// labelled by where the link is, not where its target is.
+fn scan_scope(requested: &Path, input: &Path) -> ScanScope {
     let is_file = input.is_file();
+    let link = requested
+        .is_symlink()
+        .then(|| {
+            let parent = requested.parent().filter(|p| !p.as_os_str().is_empty());
+            Some(
+                parent
+                    .unwrap_or(Path::new("."))
+                    .canonicalize()
+                    .ok()?
+                    .join(requested.file_name()?),
+            )
+        })
+        .flatten();
+    let named = link.as_deref().unwrap_or(input);
     let start = if is_file {
-        input.parent().unwrap_or(input)
+        named.parent().unwrap_or(named)
     } else {
-        input
+        named
     };
     // Prefer a repository-relative label. Absolute paths would make otherwise identical
     // reports depend on the machine or checkout directory.
     let label = match start.ancestors().find(|path| path.join(".git").exists()) {
-        Some(repository) => input
+        Some(repository) => named
             .strip_prefix(repository)
             .ok()
             .filter(|path| !path.as_os_str().is_empty()),
-        None => input.file_name().map(Path::new),
+        None => named.file_name().map(Path::new),
     };
     let path = RelativePath::lossy(label.unwrap_or(Path::new(".")));
     if is_file {

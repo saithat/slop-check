@@ -55,7 +55,8 @@ impl<'a> DependencyGraph<'a> {
         self.graph.add_node(source);
         for import in imports {
             let targets = self.resolve(&self.files[source].path, import);
-            // Count unresolved import statements, not attempted file names.
+            // Count unresolved imported modules (`import os, sys` is two), not attempted
+            // file names.
             if targets.is_empty() {
                 self.unresolved_imports += 1;
             }
@@ -101,15 +102,17 @@ impl<'a> DependencyGraph<'a> {
     /// file. Dotted names such as `./user.service` have no script extension, so they
     /// get an inferred one.
     fn javascript_module(&self, target: &str) -> Option<usize> {
-        if let Some(index) = self.lookup(target) {
-            return Some(index);
-        }
         let path = Path::new(target);
         match path.extension().and_then(OsStr::to_str) {
+            // Only script files are modules: `./c.py` names no JS/TS source.
             Some(extension) if SCRIPT_EXTENSIONS.contains(&extension) => {
-                source_alternatives(extension)
-                    .iter()
-                    .find_map(|alternative| self.lookup(path.with_extension(alternative).to_str()?))
+                self.lookup(target).or_else(|| {
+                    source_alternatives(extension)
+                        .iter()
+                        .find_map(|alternative| {
+                            self.lookup(path.with_extension(alternative).to_str()?)
+                        })
+                })
             }
             _ => SCRIPT_EXTENSIONS.iter().find_map(|extension| {
                 self.lookup(&format!("{target}.{extension}"))
@@ -239,6 +242,13 @@ mod tests {
             from: path(from),
             to: path(to),
         }
+    }
+
+    #[test]
+    fn script_specifiers_resolve_only_to_scripts() {
+        let found = dependencies(&[("b.js", "import x from './c.py';\n"), ("c.py", "x = 1\n")]);
+        assert_eq!(found.resolved_edges, []);
+        assert_eq!(found.unresolved_imports, 1);
     }
 
     #[test]
